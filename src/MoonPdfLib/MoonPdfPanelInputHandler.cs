@@ -65,7 +65,7 @@ namespace MoonPdfLib
 				lastMouseDownLocation = null;
 			else
 			{
-				if (this.source.ScrollViewer != null)
+				if (this.source.ScrollViewer != null && this.source.IsPanEnabled)
 				{
 					this.mouseHookListener.Enabled = true;
 

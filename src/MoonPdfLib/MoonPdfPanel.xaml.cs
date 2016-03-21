@@ -70,8 +70,17 @@ namespace MoonPdfLib
 
 		public static readonly DependencyProperty PageRowDisplayProperty = DependencyProperty.Register("PageRowDisplay", typeof(PageRowDisplayType),
 																			typeof(MoonPdfPanel), new FrameworkPropertyMetadata(PageRowDisplayType.SinglePageRow));
-		
-		public Thickness PageMargin
+
+        public static readonly DependencyProperty IsPanEnabledProperty =
+            DependencyProperty.Register("IsPanEnabled", typeof(bool), typeof(MoonPdfPanel), new PropertyMetadata(true));
+
+        public bool IsPanEnabled
+        {
+            get { return (bool)GetValue(IsPanEnabledProperty); }
+            set { SetValue(IsPanEnabledProperty, value); }
+        }
+
+        public Thickness PageMargin
 		{
 			get { return (Thickness)GetValue(PageMarginProperty); }
 			set { SetValue(PageMarginProperty, value); }
