@@ -43,7 +43,7 @@ namespace MoonPdfLib.MuPdf
 
             using (var stream = new PdfFileStream(source))
 			{
-                ValidatePassword(stream.Document, password);
+                ValidatePassword(stream.Context, stream.Document, password);
 
 				IntPtr p = NativeMethods.LoadPage(stream.Context, stream.Document, pageNumberIndex); // loads the page
 				var bmp = RenderPage(stream.Context, stream.Document, p, zoomFactor);
@@ -69,7 +69,7 @@ namespace MoonPdfLib.MuPdf
 
             using (var stream = new PdfFileStream(source))
 			{
-                ValidatePassword(stream.Document, password);
+                ValidatePassword(stream.Context, stream.Document, password);
 
 				var pageCount = NativeMethods.CountPages(stream.Context, stream.Document); // gets the number of pages in the document
                 var resultBounds = new System.Windows.Size[pageCount];
@@ -95,7 +95,7 @@ namespace MoonPdfLib.MuPdf
 		{
 			using (var stream = new PdfFileStream(source))
 			{
-                ValidatePassword(stream.Document, password);
+                ValidatePassword(stream.Context, stream.Document, password);
 
 				return NativeMethods.CountPages(stream.Context, stream.Document); // gets the number of pages in the document
 			}
@@ -105,19 +105,19 @@ namespace MoonPdfLib.MuPdf
         {
             using (var stream = new PdfFileStream(source))
             {
-                return NeedsPassword(stream.Document);
+                return NeedsPassword(stream.Context, stream.Document);
             }
         }
 
-        private static void ValidatePassword(IntPtr doc, string password)
+        private static void ValidatePassword(IntPtr ctx, IntPtr doc, string password)
         {
-            if (NeedsPassword(doc) && NativeMethods.AuthenticatePassword(doc, password) == 0)
+            if (NeedsPassword(ctx, doc) && NativeMethods.AuthenticatePassword(ctx, doc, password) == 0)
                 throw new MissingOrInvalidPdfPasswordException();
         }
 
-        private static bool NeedsPassword(IntPtr doc)
+        private static bool NeedsPassword(IntPtr ctx, IntPtr doc)
         {
-            return NativeMethods.NeedsPassword(doc) != 0;
+            return NativeMethods.NeedsPassword(ctx, doc) != 0;
         }
 
 		static Bitmap RenderPage(IntPtr context, IntPtr document, IntPtr page, float zoomFactor)
@@ -291,10 +291,10 @@ namespace MoonPdfLib.MuPdf
 			public static extern IntPtr GetSamples(IntPtr ctx, IntPtr pix);
 
             [DllImport(DLL, EntryPoint = "fz_needs_password", CallingConvention = CallingConvention.Cdecl)]
-            public static extern int NeedsPassword(IntPtr doc);
+            public static extern int NeedsPassword(IntPtr ctx, IntPtr doc);
 
             [DllImport(DLL, EntryPoint = "fz_authenticate_password", CallingConvention = CallingConvention.Cdecl)]
-            public static extern int AuthenticatePassword(IntPtr doc, string password);
+            public static extern int AuthenticatePassword(IntPtr ctx, IntPtr doc, string password);
 
             [DllImport(DLL, EntryPoint = "fz_open_memory", CharSet = CharSet.Unicode, CallingConvention = CallingConvention.Cdecl)]
             public static extern IntPtr OpenStream(IntPtr ctx, IntPtr data, int len);
