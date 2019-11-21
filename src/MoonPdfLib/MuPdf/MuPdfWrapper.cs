@@ -45,11 +45,11 @@ namespace MoonPdfLib.MuPdf
 			{
                 ValidatePassword(stream.Document, password);
 
-				IntPtr p = NativeMethods.LoadPage(stream.Document, pageNumberIndex); // loads the page
+				IntPtr p = NativeMethods.LoadPage(stream.Context, stream.Document, pageNumberIndex); // loads the page
 				var bmp = RenderPage(stream.Context, stream.Document, p, zoomFactor);
-				NativeMethods.FreePage(stream.Document, p); // releases the resources consumed by the page
+                NativeMethods.FreePage(stream.Context, p); // releases the resources consumed by the page
 
-				return bmp;
+                return bmp;
 			}
 		}
 
@@ -71,18 +71,18 @@ namespace MoonPdfLib.MuPdf
 			{
                 ValidatePassword(stream.Document, password);
 
-				var pageCount = NativeMethods.CountPages(stream.Document); // gets the number of pages in the document
+				var pageCount = NativeMethods.CountPages(stream.Context, stream.Document); // gets the number of pages in the document
                 var resultBounds = new System.Windows.Size[pageCount];
 
 				for (int i = 0; i < pageCount; i++)
 				{
-					IntPtr p = NativeMethods.LoadPage(stream.Document, i); // loads the page
-					Rectangle pageBound = NativeMethods.BoundPage(stream.Document, p);
+					IntPtr p = NativeMethods.LoadPage(stream.Context, stream.Document, i); // loads the page
+					Rectangle pageBound = NativeMethods.BoundPage(stream.Context, p);
 
 					resultBounds[i] = sizeCallback(pageBound.Width, pageBound.Height);
 
-					NativeMethods.FreePage(stream.Document, p); // releases the resources consumed by the page
-				}
+                    NativeMethods.FreePage(stream.Context, p); // releases the resources consumed by the page
+                }
 
                 return resultBounds;
 			}
@@ -97,7 +97,7 @@ namespace MoonPdfLib.MuPdf
 			{
                 ValidatePassword(stream.Document, password);
 
-				return NativeMethods.CountPages(stream.Document); // gets the number of pages in the document
+				return NativeMethods.CountPages(stream.Context, stream.Document); // gets the number of pages in the document
 			}
 		}
 
@@ -122,7 +122,7 @@ namespace MoonPdfLib.MuPdf
 
 		static Bitmap RenderPage(IntPtr context, IntPtr document, IntPtr page, float zoomFactor)
 		{
-			Rectangle pageBound = NativeMethods.BoundPage(document, page);
+			Rectangle pageBound = NativeMethods.BoundPage(context, page);
 			Matrix ctm = new Matrix();
 			IntPtr pix = IntPtr.Zero;
 			IntPtr dev = IntPtr.Zero;
@@ -140,17 +140,19 @@ namespace MoonPdfLib.MuPdf
             ctm.D = zoomY;
 
 			// creates a pixmap the same size as the width and height of the page
-			pix = NativeMethods.NewPixmap(context, NativeMethods.FindDeviceColorSpace(context, "DeviceRGB"), width, height);
+			pix = NativeMethods.NewPixmap(context, NativeMethods.RGBColorSpace(context), width, height, IntPtr.Zero, 1);
 			// sets white color as the background color of the pixmap
 			NativeMethods.ClearPixmap(context, pix, 0xFF);
 
-			// creates a drawing device
-			dev = NativeMethods.NewDrawDevice(context, pix);
-			// draws the page on the device created from the pixmap
-			NativeMethods.RunPage(document, page, dev, ctm, IntPtr.Zero);
+            // creates a drawing device
+            var identity = new Matrix() { A = 1, D = 1};
+            dev = NativeMethods.NewDrawDevice(context, identity, pix);
+            // draws the page on the device created from the pixmap
 
-			NativeMethods.FreeDevice(dev); // frees the resources consumed by the device
-			dev = IntPtr.Zero;
+			NativeMethods.RunPage(context, page, dev, ctm, IntPtr.Zero);
+
+            NativeMethods.FreeDevice(context, dev); // frees the resources consumed by the device
+            dev = IntPtr.Zero;
 
 			// creates a colorful bitmap of the same size of the pixmap
 			Bitmap bmp = new Bitmap(width, height, PixelFormat.Format24bppRgb);
@@ -203,6 +205,7 @@ namespace MoonPdfLib.MuPdf
                 {
                     var fs = (FileSource)source;
                     Context = NativeMethods.NewContext(IntPtr.Zero, IntPtr.Zero, FZ_STORE_DEFAULT); // Creates the context
+                    NativeMethods.InitializeContext(Context);
                     Stream = NativeMethods.OpenFile(Context, fs.Filename); // opens file as a stream
                     Document = NativeMethods.OpenDocumentStream(Context, ".pdf", Stream); // opens the document
                 }
@@ -220,20 +223,23 @@ namespace MoonPdfLib.MuPdf
 
 			public void Dispose()
 			{
-				NativeMethods.CloseDocument(Document); // releases the resources
-				NativeMethods.CloseStream(Stream);
-				NativeMethods.FreeContext(Context);
-			}
+                NativeMethods.CloseDocument(Context, Document); // releases the resources
+                NativeMethods.CloseStream(Context, Stream);
+                NativeMethods.FreeContext(Context);
+            }
 		}
 
 		private static class NativeMethods
 		{
 			const string DLL = "libmupdf.dll";
 
-			[DllImport(DLL, EntryPoint = "fz_new_context", CallingConvention = CallingConvention.Cdecl)]
-			public static extern IntPtr NewContext(IntPtr alloc, IntPtr locks, uint max_store);
+			[DllImport(DLL, EntryPoint = "fz_new_context_imp", CallingConvention = CallingConvention.Cdecl)]
+			public static extern IntPtr NewContext(IntPtr alloc, IntPtr locks, uint max_store, string version = "1.16.1");
 
-			[DllImport(DLL, EntryPoint = "fz_free_context", CallingConvention = CallingConvention.Cdecl)]
+            [DllImport(DLL, EntryPoint = "fz_register_document_handlers", CallingConvention = CallingConvention.Cdecl)]
+            public static extern void InitializeContext(IntPtr alloc);
+
+            [DllImport(DLL, EntryPoint = "fz_drop_context", CallingConvention = CallingConvention.Cdecl)]
 			public static extern IntPtr FreeContext(IntPtr ctx);
 
 			[DllImport(DLL, EntryPoint = "fz_open_file_w", CharSet = CharSet.Unicode, CallingConvention = CallingConvention.Cdecl)]
@@ -242,41 +248,41 @@ namespace MoonPdfLib.MuPdf
 			[DllImport(DLL, EntryPoint = "fz_open_document_with_stream", CallingConvention = CallingConvention.Cdecl)]
 			public static extern IntPtr OpenDocumentStream(IntPtr ctx, string magic, IntPtr stm);
 
-			[DllImport(DLL, EntryPoint = "fz_close", CallingConvention = CallingConvention.Cdecl)]
-			public static extern IntPtr CloseStream(IntPtr stm);
+			[DllImport(DLL, EntryPoint = "fz_drop_stream", CallingConvention = CallingConvention.Cdecl)]
+			public static extern IntPtr CloseStream(IntPtr ctx, IntPtr stm);
 
-			[DllImport(DLL, EntryPoint = "fz_close_document", CallingConvention = CallingConvention.Cdecl)]
-			public static extern IntPtr CloseDocument(IntPtr doc);
+			[DllImport(DLL, EntryPoint = "fz_drop_document", CallingConvention = CallingConvention.Cdecl)]
+			public static extern IntPtr CloseDocument(IntPtr ctx, IntPtr doc);
 
 			[DllImport(DLL, EntryPoint = "fz_count_pages", CallingConvention = CallingConvention.Cdecl)]
-			public static extern int CountPages(IntPtr doc);
+			public static extern int CountPages(IntPtr ctx, IntPtr doc);
 
 			[DllImport(DLL, EntryPoint = "fz_bound_page", CallingConvention = CallingConvention.Cdecl)]
-			public static extern Rectangle BoundPage(IntPtr doc, IntPtr page);
+			public static extern Rectangle BoundPage(IntPtr ctx, IntPtr page);
 
 			[DllImport(DLL, EntryPoint = "fz_clear_pixmap_with_value", CallingConvention = CallingConvention.Cdecl)]
 			public static extern void ClearPixmap(IntPtr ctx, IntPtr pix, int byteValue);
 
-			[DllImport(DLL, EntryPoint = "fz_find_device_colorspace", CallingConvention = CallingConvention.Cdecl)]
-			public static extern IntPtr FindDeviceColorSpace(IntPtr ctx, string colorspace);
+			[DllImport(DLL, EntryPoint = "fz_device_rgb", CallingConvention = CallingConvention.Cdecl)]
+			public static extern IntPtr RGBColorSpace(IntPtr ctx);
 
-			[DllImport(DLL, EntryPoint = "fz_free_device", CallingConvention = CallingConvention.Cdecl)]
-			public static extern void FreeDevice(IntPtr dev);
+			[DllImport(DLL, EntryPoint = "fz_drop_device", CallingConvention = CallingConvention.Cdecl)]
+			public static extern void FreeDevice(IntPtr ctx, IntPtr dev);
 
-			[DllImport(DLL, EntryPoint = "fz_free_page", CallingConvention = CallingConvention.Cdecl)]
-			public static extern void FreePage(IntPtr doc, IntPtr page);
+			[DllImport(DLL, EntryPoint = "fz_drop_page", CallingConvention = CallingConvention.Cdecl)]
+			public static extern void FreePage(IntPtr ctx, IntPtr page);
 
 			[DllImport(DLL, EntryPoint = "fz_load_page", CallingConvention = CallingConvention.Cdecl)]
-			public static extern IntPtr LoadPage(IntPtr doc, int pageNumber);
+			public static extern IntPtr LoadPage(IntPtr ctx, IntPtr doc, int pageNumber);
 
 			[DllImport(DLL, EntryPoint = "fz_new_draw_device", CallingConvention = CallingConvention.Cdecl)]
-			public static extern IntPtr NewDrawDevice(IntPtr ctx, IntPtr pix);
+			public static extern IntPtr NewDrawDevice(IntPtr ctx, Matrix transform, IntPtr pix);
 
 			[DllImport(DLL, EntryPoint = "fz_new_pixmap", CallingConvention = CallingConvention.Cdecl)]
-			public static extern IntPtr NewPixmap(IntPtr ctx, IntPtr colorspace, int width, int height);
+			public static extern IntPtr NewPixmap(IntPtr ctx, IntPtr colorspace, int width, int height, IntPtr separation, int alpha);
 
 			[DllImport(DLL, EntryPoint = "fz_run_page", CallingConvention = CallingConvention.Cdecl)]
-			public static extern void RunPage(IntPtr doc, IntPtr page, IntPtr dev, Matrix transform, IntPtr cookie);
+			public static extern void RunPage(IntPtr ctx, IntPtr page, IntPtr dev, Matrix transform, IntPtr cookie);
 
 			[DllImport(DLL, EntryPoint = "fz_drop_pixmap", CallingConvention = CallingConvention.Cdecl)]
 			public static extern void DropPixmap(IntPtr ctx, IntPtr pix);
