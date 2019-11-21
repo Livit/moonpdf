@@ -213,6 +213,7 @@ namespace MoonPdfLib.MuPdf
                 {
                     var ms = (MemorySource)source;
                     Context = NativeMethods.NewContext(IntPtr.Zero, IntPtr.Zero, FZ_STORE_DEFAULT); // Creates the context
+                    NativeMethods.InitializeContext(Context);
                     GCHandle pinnedArray = GCHandle.Alloc(ms.Bytes, GCHandleType.Pinned);
                     IntPtr pointer = pinnedArray.AddrOfPinnedObject();
                     Stream = NativeMethods.OpenStream(Context, pointer, ms.Bytes.Length); // opens file as a stream
