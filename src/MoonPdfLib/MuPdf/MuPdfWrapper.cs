@@ -43,6 +43,7 @@ namespace MoonPdfLib.MuPdf
 
             using (var stream = new PdfFileStream(source))
 			{
+                ValidateFile(stream.Document);
                 ValidatePassword(stream.Context, stream.Document, password);
 
 				IntPtr p = NativeMethods.LoadPage(stream.Context, stream.Document, pageNumberIndex); // loads the page
@@ -68,7 +69,8 @@ namespace MoonPdfLib.MuPdf
 				sizeCallback = (width, height) => new System.Windows.Size(height, width); // switch width and height
 
             using (var stream = new PdfFileStream(source))
-			{
+            {
+                ValidateFile(stream.Document);
                 ValidatePassword(stream.Context, stream.Document, password);
 
 				var pageCount = NativeMethods.CountPages(stream.Context, stream.Document); // gets the number of pages in the document
@@ -94,7 +96,8 @@ namespace MoonPdfLib.MuPdf
         public static int CountPages(IPdfSource source, string password = null)
 		{
 			using (var stream = new PdfFileStream(source))
-			{
+            {
+                ValidateFile(stream.Document);
                 ValidatePassword(stream.Context, stream.Document, password);
 
 				return NativeMethods.CountPages(stream.Context, stream.Document); // gets the number of pages in the document
@@ -113,6 +116,12 @@ namespace MoonPdfLib.MuPdf
         {
             if (NeedsPassword(ctx, doc) && NativeMethods.AuthenticatePassword(ctx, doc, password) == 0)
                 throw new MissingOrInvalidPdfPasswordException();
+        }
+
+        private static void ValidateFile(IntPtr doc)
+        {
+            if (doc == IntPtr.Zero)
+                throw new BrokenOrInvalidPdfException();
         }
 
         private static bool NeedsPassword(IntPtr ctx, IntPtr doc)
@@ -327,6 +336,13 @@ namespace MoonPdfLib.MuPdf
     {
         public MissingOrInvalidPdfPasswordException()
             : base("A password for the pdf document was either not provided or is invalid.")
+        { }
+    }
+
+    public class BrokenOrInvalidPdfException : Exception
+    {
+        public BrokenOrInvalidPdfException()
+            : base("Pdf can't be opened, the file is either invalid or broken.")
         { }
     }
 
